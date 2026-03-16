@@ -1,0 +1,53 @@
+{
+  "loss": 3.4116304168701173,
+  "perplexity": 30.31462947252124,
+  "total_tokens": 256000,
+  "accuracy": 0.39382421875,
+  "correct": 100819,
+  "total": 256000,
+  "generation_samples": [
+    {
+      "prompt": "人工智能",
+      "output": "人工智能<|im_start|>为给定的数据生成摘要。\n数据集： 1000字\n数据：\n很抱歉，作为AI语言模型，我无法提供实时数据，无法提供实时数据。但你可以通过分析数据，以提供实时准确信息和准确的信息",
+      "length": 50
+    },
+    {
+      "prompt": "机器学习是",
+      "output": "机器学习是学习学习、学习、学习等。<|im_end|> <|im_start|>将以下段落的摘要为一句话。\n一位年轻女孩在草原上看到了一只可爱的小狗，他被一位年轻女孩在树上看见了他的妈妈，",
+      "length": 50
+    },
+    {
+      "prompt": "深度学习的应用包括",
+      "output": "深度学习的应用包括但不限于：决策预测、预测预测预测预测、市场预测、市场竞争投资等。<|im_end|> <|im_start|>我想了解一下目前最热门的电影。 最近最受欢迎的电影包括《阿凡达》、《麦�",
+      "length": 50
+    },
+    {
+      "prompt": "自然语言处理",
+      "output": "自然语言处理<|im_start|>从刚刚的文章中提取出未来AI技术的优点。未来AI已经被广泛应用，其优点包括：提高工作效率、提高效率、改善准确性、提高效率、提高效率等等。未来，AI将会在人类中发挥着重要的作用",
+      "length": 50
+    },
+    {
+      "prompt": "计算机视觉",
+      "output": "计算机视觉<|im_start|>请介绍一下《红楼梦》中的人物和作者。\n《红楼梦》是刘慈欣所创作的一部由李白·吴爱玉、李白等诗人李白、李白等人之间的爱情故事，",
+      "length": 50
+    }
+  ],
+  "diversity_metrics": {
+    "distinct_1": 0.8679245283018868,
+    "distinct_2": 0.9791666666666666,
+    "distinct_3": 1.0,
+    "avg_length": 10.6,
+    "vocab_usage": 0.8679245283018868,
+    "total_tokens": 53,
+    "unique_tokens": 46
+  },
+  "checkpoint": "/root/autodl-tmp/my_gpt_small/ckpt/pretrain/final",
+  "model_config": {
+    "vocab_size": 6400,
+    "n_layer": 6,
+    "n_head": 6,
+    "n_kv_head": 2,
+    "n_embd": 384,
+    "block_size": 256
+  }
+}

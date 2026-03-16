@@ -1,0 +1,174 @@
+# MiniMind 配置文件
+# 统一管理所有训练和推理参数
+
+# ============================================================================
+# 模型架构配置
+# ============================================================================
+model:
+  vocab_size: 6400          # 词表大小
+  n_layer: 6                # Transformer 层数
+  n_head: 6                 # 注意力头数
+  n_kv_head: 2              # KV 头数 (GQA)
+  n_embd: 384               # 嵌入维度
+  block_size: 256           # 最大序列长度
+  dropout: 0.0              # Dropout 比例
+  bias: false               # 是否使用 bias
+  rope_theta: 10000.0       # RoPE 基础频率
+
+# ============================================================================
+# Tokenizer 配置
+# ============================================================================
+tokenizer:
+  vocab_size: 6400          # 词表大小（与模型一致）
+  model_type: "BPE"         # 模型类型：BPE 或 WordPiece
+  min_frequency: 2          # 最小词频
+  special_tokens:
+    - "<unk>"               # 未知词
+    - "<pad>"               # 填充
+    - "<s>"                 # 句子开始
+    - "</s>"                # 句子结束
+  save_path: "my_tokenizer" # 保存路径
+
+# ============================================================================
+# 数据处理配置
+# ============================================================================
+data:
+  dataset_path: "minimind_dataset/pretrain_hq.jsonl"  # 数据集路径
+  output_dir: "data"                                  # 输出目录
+  max_length: 256                                     # 最大序列长度
+  train_split: 0.9                                    # 训练集比例
+  val_split: 0.1                                      # 验证集比例
+  num_workers: 4                                      # 数据加载线程数 (Linux推荐4-8)
+
+# ============================================================================
+# 预训练配置
+# ============================================================================
+pretrain:
+  # 训练步数
+  total_steps: 5000         # 总训练步数
+  save_steps: 500           # 保存间隔
+  eval_steps: 100           # 评估间隔
+  log_interval: 10          # 日志间隔
+  
+  # 批次大小 (RTX 4090优化)
+  batch_size: 32            # 每个 GPU 的批次大小 (4090可用32)
+  gradient_accumulation_steps: 1  # 梯度累积步数
+  
+  # 优化器
+  learning_rate: 3.0e-4     # 学习率（与DeepSpeed配置一致）
+  weight_decay: 0.1         # 权重衰减
+  beta1: 0.9                # Adam beta1
+  beta2: 0.95               # Adam beta2
+  grad_clip: 1.0            # 梯度裁剪
+  
+  # 学习率调度
+  lr_scheduler: "cosine"    # 学习率调度器：cosine, linear, constant
+  min_lr: 0.0               # 最小学习率
+  warmup_steps: 200         # 预热步数（与DeepSpeed配置一致）
+  
+  # 检查点
+  checkpoint_dir: "ckpt/pretrain"  # 检查点目录
+  resume_from: null         # 恢复训练的检查点路径
+  
+  # DeepSpeed
+  deepspeed_config: "configs/deepspeed_zero2.json"  # DeepSpeed 配置文件
+
+# ============================================================================
+# 推理配置
+# ============================================================================
+inference:
+  checkpoint: "ckpt/pretrain/final"  # 模型检查点路径
+  max_new_tokens: 100       # 最大生成 token 数
+  temperature: 0.8          # 温度参数
+  top_k: 50                 # Top-K 采样
+  top_p: 0.9                # Top-P 采样
+  repetition_penalty: 1.0   # 重复惩罚
+  do_sample: true           # 是否采样
+
+# ============================================================================
+# 多轮对话配置
+# ============================================================================
+chat:
+  checkpoint: "ckpt/pretrain/final"  # 模型检查点路径
+  max_new_tokens: 50        # 每轮最大生成 token 数
+  temperature: 0.8          # 温度参数
+  top_k: 50                 # Top-K 采样
+  top_p: 0.9                # Top-P 采样
+  max_history: 10           # 最大历史轮数
+  system_prompt: "你是一个有帮助的AI助手。"  # 系统提示
+
+# ============================================================================
+# RLHF - Reward Model 配置
+# ============================================================================
+reward_model:
+  # 数据
+  train_data: "minimind_dataset/hh_rlhf_cn/helpful_base_cn_train.jsonl"
+  test_data: "minimind_dataset/hh_rlhf_cn/helpful_base_cn_test.jsonl"
+  
+  # 训练
+  total_steps: 1000         # 总训练步数（与DeepSpeed配置一致）
+  batch_size: 32            # 批次大小 (RTX 4090优化，原16)
+  learning_rate: 2.0e-5     # 学习率（与DeepSpeed配置一致）
+  warmup_steps: 100         # 预热步数（与DeepSpeed配置一致）
+  save_steps: 200           # 保存间隔
+  eval_steps: 100           # 评估间隔
+  log_interval: 10          # 日志间隔
+  
+  # 检查点
+  checkpoint_dir: "ckpt/rm"  # 检查点目录
+  pretrained_model: "ckpt/pretrain/final"  # 预训练模型路径
+  
+  # DeepSpeed
+  deepspeed_config: "configs/deepspeed_zero2_rm.json"
+
+# ============================================================================
+# RLHF - PPO 配置
+# ============================================================================
+ppo:
+  # 数据
+  train_data: "minimind_dataset/hh_rlhf_cn/helpful_base_cn_train.jsonl"
+  
+  # 训练
+  total_steps: 1000         # 总训练步数（与DeepSpeed配置一致）
+  batch_size: 16            # 批次大小 (RTX 4090优化，原8)
+  learning_rate: 1.0e-5     # 学习率（与DeepSpeed配置一致）
+  warmup_steps: 100         # 预热步数（与DeepSpeed配置一致）
+  save_steps: 100           # 保存间隔
+  log_interval: 10          # 日志间隔
+  
+  # PPO 参数
+  ppo_epochs: 4             # PPO 训练轮数
+  clip_epsilon: 0.2         # PPO clip 参数
+  value_loss_coef: 0.1      # Value loss 系数
+  entropy_coef: 0.01        # 熵正则化系数
+  gamma: 0.99               # 折扣因子
+  lam: 0.95                 # GAE lambda
+  
+  # 检查点
+  checkpoint_dir: "ckpt/ppo"  # 检查点目录
+  actor_model: "ckpt/pretrain/final"  # Actor 模型路径
+  reward_model: "ckpt/rm"       # Reward 模型路径（修正：去掉 /final）
+  
+  # DeepSpeed
+  deepspeed_config: "configs/deepspeed_zero2_ppo.json"
+
+# ============================================================================
+# 日志配置
+# ============================================================================
+logging:
+  level: "INFO"             # 日志级别：DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  save_to_file: true        # 是否保存到文件
+  log_dir: "logs"           # 日志目录
+  tensorboard: true         # 是否使用 TensorBoard
+  tensorboard_dir: "runs"   # TensorBoard 目录
+
+# ============================================================================
+# 系统配置
+# ============================================================================
+system:
+  seed: 42                  # 随机种子
+  device: "cuda"            # 设备：cuda 或 cpu (默认使用GPU)
+  num_workers: 4            # 数据加载线程数 (Linux推荐4-8)
+  pin_memory: true          # 是否使用 pin_memory (GPU训练推荐开启)
+  compile: false            # 是否使用 torch.compile（需要 PyTorch 2.0+）

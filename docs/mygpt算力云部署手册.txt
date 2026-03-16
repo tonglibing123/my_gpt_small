@@ -1,0 +1,380 @@
+autoDL学术加速
+打开学术加速，之后就可像平常一样使用linux了，但下载速度会很快
+https://www.autodl.com/docs/network_turbo/
+打开学术加速
+source /etc/network_turbo
+关闭学术加速
+unset http_proxy && unset https_proxy
+
+打开学术加速
+source /etc/network_turbo
+
+虚拟环境建立：conda env list
+	conda env list
+	conda create -n mygpt2 python=3.10
+	conda activate mygpt2
+	source activate mygpt2使用source就不需要关闭命令行，再打开了
+
+环境安装
+pip install -r requirements.txt
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+
+kiro连接算力云
+打开kero的命令行，在里面输入算力云镜像的ssh和密码：
+ssh：ssh -p 27421 root@connect.bjb1.seetacloud.com，回车后会显示输入密码
+密码：H0dI6hXYBndE，粘贴后，没反应是正常的，直接点回车
+此时kiro的命令行就连接算力云了：可以通过sl指令查看算力云的内容了
+
+激活算李云上的虚拟环境
+conda activate mygpt2
+
+## 训练流程
+
+### 第1步: 训练 Tokenizer
+
+```bash
+python src/training/train_tokenizer.py \
+  --input_file minimind_dataset/pretrain_hq.jsonl \
+  --vocab_size 6400 \
+  --output_dir my_tokenizer
+```
+
+总结
+预计时间: 4-6 分钟（实际：17：05开始，到17：20结束，用时：20分钟，17：25）
+主要使用: CPU（不使用 GPU）
+内存需求: 2-3 GB
+磁盘占用: 输出约 10 MB
+这是整个训练流程中最快的一步，可以放心运行！运行完成后，你就可以进行下一步的数据预处理了
+
+数据预处理：很快
+cd /root/autodl-tmp/my_gpt_small
+python src/data/pretokenize.py \
+  --input_file minimind_dataset/pretrain_hq.jsonl \
+  --tokenizer_path my_tokenizer \
+  --output_dir data \
+  --shard_tokens 5000000 \
+  --n_worker 4
+
+### 第2.5步: 数据探索（推荐）
+cd /root/autodl-tmp/my_gpt_small/tests
+python test_tokenizer.py
+
+结果：
+============================================================
+分词器测试套件
+============================================================
+
+============================================================
+测试1: 分词器训练
+============================================================
+✓ 准备了 600 条测试文本
+✓ 分词器训练完成
+✓ 词表大小: 265
+✓ 特殊 token 验证通过
+✓ 分词器已保存到: /tmp/tmplg1sioo8/test_tokenizer
+✅ 分词器训练测试通过
+
+============================================================
+测试2: 编码和解码
+============================================================
+✓ 测试分词器训练完成
+❌ 编码解码测试失败: 解码不一致: '人工智能在未来' -> '人工智能在未 '
+Traceback (most recent call last):
+  File "/root/autodl-tmp/my_gpt_small/tests/test_tokenizer.py", line 117, in test_tokenizer_encode_decode
+    assert decoded == text, f"解码不一致: '{text}' -> '{decoded}'"
+AssertionError: 解码不一致: '人工智能在未来' -> '人工智能在未 '
+
+============================================================
+测试3: 特殊 token 处理
+============================================================
+✓ pad_token_id: 0
+✓ unk_token_id: 1
+✓ bos_token_id: 2
+✓ eos_token_id: 3
+✓ 带特殊 token: '测试文本'
+✓ 不带特殊 token: '测试文本'
+✅ 特殊 token 测试通过
+
+============================================================
+测试4: 词表大小限制
+============================================================
+✓ 目标词表: 100, 实际词表: 100
+✓ 目标词表: 500, 实际词表: 500
+✓ 目标词表: 1000, 实际词表: 1000
+✅ 词表大小限制测试通过
+
+============================================================
+测试总结
+============================================================
+总测试数: 4
+通过: 3 ✅
+失败: 1 ❌
+成功率: 75.0%
+============================================================
+
+
+
+模型训练：时间很长
+kiro
+cd /root/autodl-tmp/my_gpt_small
+OMP_NUM_THREADS=1 deepspeed --num_gpus 1 src/training/train_model.py --data_dir data --deepspeed configs/deepspeed_zero2.json --total_steps 5000
+
+算例云：
+deepspeed --num_gpus 1 src/training/train_model.py \
+  --data_dir data \
+  --deepspeed configs/deepspeed_zero2.json \
+  --total_steps 5000 \
+  --batch_size 16 \
+  --save_steps 500 \
+  --keep_recent 2 \
+  --keep_best 1 \
+  --log_interval 10
+
+
+
+在命令行打印的结果（部分）：
+03-14 10:15:08 | INFO | Model saved to ckpt/pretrain/step_5000
+03-14 10:15:08 | INFO | 最终验证 loss=3.3836
+03-14 10:15:08 | INFO | Model saved to ckpt/pretrain/final
+03-14 10:15:08 | INFO | Checkpoint摘要: 共保存 3 个, 最佳 step=5000 val_loss=3.1047
+03-14 10:15:08 | INFO | 训练完成！
+[rank0]:[W314 10:15:09.247117245 ProcessGroupNCCL.cpp:1250] Warning: WARNING: process group has NOT been destroyed before we destruct ProcessGroupNCCL. On normal program exit, the application should call destroy_process_group to ensure that any pending NCCL operations have finished in this process. In rare cases this process can exit before this point and block the progress of another member of the process group. This constraint has always been present,  but this warning has only been added since PyTorch 2.4 (function operator())
+[2026-03-14 10:15:11,224] [INFO] [launch.py:367:main] Process 2907 exits successfully.
+
+
+**训练监控**:
+```bash
+# 在另一个终端启动 TensorBoard
+tensorboard --logdir=runs
+
+# 在浏览器打开
+先建立ssh连接，再输入下列网址，可以看到损失函数下降曲线
+http://localhost:6006
+
+### 第5步: 模型评估(命令里面的路径一定要改对！！！)
+cd /root/autodl-tmp/my_gpt_small/tools
+
+python model_evaluator.py \
+  --checkpoint /root/autodl-tmp/my_gpt_small/ckpt/pretrain/final \
+  --tokenizer_path /root/autodl-tmp/my_gpt_small/my_tokenizer \
+  --data_dir /root/autodl-tmp/my_gpt_small/data \
+  --max_samples 1000
+
+结果:
+  - 准确率: 39.38%
+  - 正确预测: 100,819 / 256,000
+
+============================================================
+✍️  评估生成质量
+============================================================
+
+输入: 人工智能
+输出: 人工智能<|im_start|>为给定的数据生成摘要。
+数据集： 1000字
+数据：
+很抱歉，作为AI语言模型，我无法提供实时数据，无法提供实时数据。但你可以通过分析数据，以提供实时准确信息和准确的信息
+
+输入: 机器学习是
+输出: 机器学习是学习学习、学习、学习等。<|im_end|> <|im_start|>将以下段落的摘要为一句话。
+一位年轻女孩在草原上看到了一只可爱的小狗，他被一位年轻女孩在树上看见了他的妈妈，
+
+输入: 深度学习的应用包括
+输出: 深度学习的应用包括但不限于：决策预测、预测预测预测预测、市场预测、市场竞争投资等。<|im_end|> <|im_start|>我想了解一下目前最热门的电影。 最近最受欢迎的电影包括《阿凡达》、《麦 
+
+输入: 自然语言处理
+输出: 自然语言处理<|im_start|>从刚刚的文章中提取出未来AI技术的优点。未来AI已经被广泛应用，其优点包括：提高工作效率、提高效率、改善准确性、提高效率、提高效率等等。未来，AI将会在人类中发挥着重要的作用
+
+输入: 计算机视觉
+输出: 计算机视觉<|im_start|>请介绍一下《红楼梦》中的人物和作者。
+《红楼梦》是刘慈欣所创作的一部由李白·吴爱玉、李白等诗人李白、李白等人之间的爱情故事，
+
+生成多样性指标:
+  - Distinct-1: 0.8679
+  - Distinct-2: 0.9792
+  - Distinct-3: 1.0000
+  - 平均长度: 10.6 tokens
+  - 词表使用率: 86.79%
+
+============================================================
+✅ 评估完成！
+============================================================
+
+结果已保存: evaluation_results.json
+
+总结:
+  - 困惑度: 30.31
+  - 准确率: 39.38%
+  - 平均 Loss: 3.4116
+
+生成多样性:
+  - Distinct-1: 0.8679
+  - Distinct-2: 0.9792
+  - Distinct-3: 1.0000
+评估结果结束#######################333
+
+测试模型
+cd /root/autodl-tmp/my_gpt_small
+在kiro和算力云都可以
+python src/inference/infer.py \
+  --checkpoint ckpt/pretrain/final \
+  --tokenizer_path my_tokenizer \
+  --prompt "人工智能在未来" \
+  --max_new_tokens 100 \
+  --temperature 0.8
+
+输出结果：
+从配置文件加载模型参数: ckpt/pretrain/final/config.json
+/root/autodl-tmp/my_gpt_small/src/inference/infer.py:74: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  state_dict = torch.load(model_path, map_location=args.device)
+模型加载成功: ckpt/pretrain/final/pytorch_model.bin
+模型参数量: 9.44M
+
+============================================================
+输入: 人工智能在未来
+============================================================
+
+输出: 人工智能在未来前景。<|im_end|> <|im_start|>根据下面这个词语是什么意思：天下、吒在。
+成语出处：唐·吴子《天下诗》诗书说道，天无知，不一无情，无名其人，也。”<|im_end|> <|im_start|>这个词语是什么意思？以为人一、有。言指指其人不见的人。
+成语出处：清·王者公·史语《春海传》
+
+============================================================
+
+
+#### 多轮对话（推荐）✨
+cd /root/autodl-tmp/my_gpt_small/src/inference
+
+命令中的模块行路径一定要写对！！！
+python chat.py \
+  --checkpoint /root/autodl-tmp/my_gpt_small/ckpt/pretrain/final \
+  --tokenizer_path /root/autodl-tmp/my_gpt_small/my_tokenizer \
+  --max_new_tokens 50 \
+  --temperature 0.8
+
+运行结果：
+对话过程
+============================================================
+
+👤 你: 你好 
+
+🤖 助手: <|im_start|>很好的，再给我讲一个笑话。好的，有个笑话：有一只鸟，它为什么它会不会下雨？为什么它会下雨？因为一只鸟会下雨吗？答案为：“你最爱
+
+💡 本轮统计: 计算 1 tokens, 生成 50 tokens, 耗时 0.54s (92.5 tokens/s)
+📊 历史长度: 51 tokens, KV Cache: 0.29 MB
+
+👤 你:哈哈哈   
+
+🤖 助手: ，它就可能想雨什么？”这两个句子的意思是说，“你是我最爱之心了，它的总是会下雨吗？<|im_end|> <|im_start|>那你认为人工智能会取代人类吗？人工智能会取代人类工作
+
+💡 本轮统计: 计算 4 tokens, 生成 50 tokens, 耗时 0.27s (185.7 tokens/s)
+📊 历史长度: 105 tokens, KV Cache: 0.59 MB
+
+👤 你: 是的
+
+🤖 助手: ，但人类可能会被取代，但它对人类和人类的认知也产生重大影响。因此，人工智能也将改变我们的生活方式，带来更多便利和便利，从而让人类和人类的生活更加方便。<|im_end|> <|im_start
+
+💡 本轮统计: 计算 1 tokens, 生成 50 tokens, 耗时 0.19s (266.8 tokens/s)
+📊 历史长度: 156 tokens, KV Cache: 0.88 MB
+
+
+## RLHF 训练（可选）
+
+### 第7步: 训练 Reward Model
+
+cd /root/autodl-tmp/my_gpt_small/src/training
+deepspeed --num_gpus 1 train_reward_model.py \
+  --data_files /root/autodl-tmp/my_gpt_small/minimind_dataset/hh_rlhf_cn/helpful_base_cn_train.jsonl \
+  --tokenizer_path /root/autodl-tmp/my_gpt_small/my_tokenizer \
+  --deepspeed /root/autodl-tmp/my_gpt_small/configs/deepspeed_zero2_rm.json \
+  --output_dir /root/autodl-tmp/my_gpt_small/ckpt/rm \
+  --batch_size 16 \
+  --epochs 1
+
+
+ Reward Model模型测试
+cd /root/autodl-tmp/my_gpt_small/tests
+python test_reward_model.py
+测试 6: 奖励模型比较
+输出结果：
+============================================================
+✅ 奖励比较成功
+   - Chosen 奖励: ['-0.4118', '0.1450', '-0.2218', '-0.1500']
+   - Rejected 奖励: ['-0.4056', '-0.2367', '-0.1297', '0.1463']
+   - 注意: 未训练的模型奖励值是随机的
+
+======================================================================
+  测试结果: 6 通过, 0 失败, 0 跳过
+======================================================================
+
+🎉 所有测试通过！
+
+
+---
+
+### 第8步: PPO 训练
+export OMP_NUM_THREADS=$(nproc)
+cd /root/autodl-tmp/my_gpt_small/src/training
+deepspeed --num_gpus 1 train_ppo.py \
+  --tokenizer_path /root/autodl-tmp/my_gpt_small/my_tokenizer \
+  --output_dir /root/autodl-tmp/my_gpt_small/ckpt/ppo \
+  --data_path /root/autodl-tmp/my_gpt_small/minimind_dataset/hh_rlhf_cn/helpful_base_cn_train.jsonl \
+  --sft_ckpt /root/autodl-tmp/my_gpt_small/ckpt/pretrain/final/pytorch_model.bin \
+  --rm_ckpt /root/autodl-tmp/my_gpt_small/ckpt/rm/pytorch_model.bin \
+  --deepspeed /root/autodl-tmp/my_gpt_small/configs/deepspeed_zero2_ppo.json \
+  --log_dir /root/autodl-tmp/my_gpt_small/runs/ppo_train \
+  --batch_size 8 \
+  --sample_ratio 0.5 \
+  --epochs 1
+
+ppo训练更多步数和时常
+export OMP_NUM_THREADS=$(nproc)
+cd /root/autodl-tmp/my_gpt_small/src/training
+deepspeed --num_gpus 1 train_ppo.py \
+  --tokenizer_path /root/autodl-tmp/my_gpt_small/my_tokenizer/ \
+  --output_dir /root/autodl-tmp/my_gpt_small/ckpt/ppo \
+  --data_path /root/autodl-tmp/my_gpt_small/minimind_dataset/hh_rlhf_cn/helpful_base_cn_train.jsonl \
+  --sft_ckpt /root/autodl-tmp/my_gpt_small/ckpt/pretrain/final/pytorch_model.bin \
+  --rm_ckpt /root/autodl-tmp/my_gpt_small/ckpt/rm/pytorch_model.bin \
+  --deepspeed /root/autodl-tmp/my_gpt_small/configs/deepspeed_zero2_ppo.json \
+  --log_dir /root/autodl-tmp/my_gpt_small/runs/ppo_train \
+  --batch_size 8 \
+  --sample_ratio 0.5 \
+  --epochs 3 \
+  --mini_batch 16 \
+  --kl_beta 0.05 \
+  --entropy_coef 0.03 \
+  --value_loss_coef 0.5 \
+  --clip_eps 0.15 \
+  --ppo_epochs 6 \
+  --save_best
+
+
+
+
+
+
+**训练监控**:
+```bash
+# 在另一个终端启动 TensorBoard
+tensorboard --logdir=/root/autodl-tmp/my_gpt_small/runs/ppo_train
+
+# 启动TensorBoard，设置自动刷新间隔为5秒
+tensorboard --logdir=/root/autodl-tmp/my_gpt_small/runs/ppo_train \
+  --port=6006 \
+  --host=0.0.0.0 \
+  --reload_interval=5  # 每5秒扫描一次日志文件
+
+# 在浏览器打开
+先建立ssh连接，再输入下列网址，可以看到损失函数下降曲线
+http://localhost:6006
+
+ppo测试
+测试与训练模型
+cd /root/autodl-tmp/my_gpt_small/src/inference
+python chat.py \
+  --checkpoint /root/autodl-tmp/my_gpt_small/ckpt/ppo/final_model \
+  --tokenizer_path /root/autodl-tmp/my_gpt_small/my_tokenizer \
+  --max_new_tokens 50 \
+  --temperature 0.8
+
+
